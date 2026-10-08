@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Games</title>
+<meta name="description" content="A small collection of browser games — no install, just play.">
+<meta property="og:title" content="My Games 🎮">
+<meta property="og:description" content="A small collection of browser games — no install, just play.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0b1d33">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1d33'/%3E%3Cpath d='M14 26h36a8 8 0 0 1 8 8v6a6 6 0 0 1-10 4l-6-6H22l-6 6a6 6 0 0 1-10-4v-6a8 8 0 0 1 8-8z' fill='%23e8f1fb'/%3E%3C/svg%3E">
+<style>
+  :root { --bg:#0b1d33; --panel:#12294a; --line:#2a4a75; --text:#e8f1fb; --muted:#8fa9c7; --accent:#3ea6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; background: radial-gradient(1200px 600px at 50% -10%, #17386a 0%, var(--bg) 60%); color:var(--text);
+    font-family: system-ui,-apple-system,"Segoe UI",sans-serif; padding: 40px 16px 60px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header { text-align:center; margin-bottom: 36px; }
+  h1 { margin:0 0 8px; font-size: clamp(1.8rem, 6vw, 2.8rem); letter-spacing:.04em; }
+  header p { margin:0; color: var(--muted); }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+  .card { display:flex; flex-direction:column; background: var(--panel); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+    transition: transform .15s, border-color .15s, box-shadow .15s; }
+  .card.ready:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+  .thumb { aspect-ratio: 16/9; background:#0e2340; display:flex; align-items:center; justify-content:center; }
+  .thumb svg { width:100%; height:100%; display:block; }
+  .soon .thumb { font-size: 2.4rem; opacity:.5; }
+  .body { padding: 14px 16px 16px; display:flex; flex-direction:column; gap:6px; flex:1; }
+  .body h2 { margin:0; font-size:1.15rem; }
+  .body p { margin:0; color:var(--muted); font-size:.9rem; line-height:1.4; flex:1; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .tags span { font-size:.72rem; padding:2px 8px; border-radius:999px; background:#0e2340; border:1px solid var(--line); color:var(--muted); }
+  .actions { display:flex; gap:8px; margin-top:10px; }
+  .btn { flex:1; text-align:center; padding:9px 12px; border-radius:9px; font-weight:700; font-size:.92rem; text-decoration:none; cursor:pointer; border:0; }
+  .play { background: var(--accent); color:#04121f; }
+  .share { flex:0 0 auto; background:#0e2340; color:var(--text); border:1px solid var(--line); }
+  .share:hover { border-color:#25d366; }
+  .disabled { background:#0e2340; color:var(--muted); cursor:default; }
+  footer { text-align:center; color:var(--muted); font-size:.8rem; margin-top:40px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🎮 My Games</h1>
+    <p>Small games you can play right in your browser — no install needed.</p>
+  </header>
+  <main class="grid" id="games"></main>
+  <footer>Tap “Share” to send a game to a friend on WhatsApp.</footer>
+</div>
+
+<script>
+// ➕ To add a game: put it in its own folder next to this file (e.g. ./sudoku/index.html)
+//    and add one entry below. Set ready:false to show a "Coming soon" card.
+const GAMES = [
+  {
+    id: "battleship", title: "Battleship", ready: true, path: "battleship/index.html",
+    desc: "Sink the enemy fleet. Play the computer, a friend on the same device, or online — no server needed.",
+    tags: ["1–2 players", "Online", "Strategy"],
+    thumb: `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice">
+      <rect width="160" height="90" fill="#12294a"/>
+      <g fill="#1c4a7a">${Array.from({length: 10}, (_, r) => Array.from({length: 18}, (_, c) => `<rect x="${c*9+0}" y="${r*9}" width="8" height="8" rx="1.5"/>`).join("")).join("")}</g>
+      <g fill="#e8f1fb" stroke="#e8f1fb" stroke-width="1" stroke-linejoin="round">
+        <path d="M30 52 L96 52 L102 52 L94 62 L36 62 Z" fill="#0f1c2e"/>
+        <rect x="42" y="45" width="9" height="7" fill="#0f1c2e"/><rect x="51" y="46.5" width="8" height="1.2"/><rect x="51" y="49" width="8" height="1.2"/>
+        <path d="M64 52 L66 44 L80 44 L82 52" fill="#0f1c2e"/>
+      </g>
+      <circle cx="40" cy="20" r="3.5" fill="#e5484d"/><circle cx="58" cy="29" r="3.5" fill="#e5484d"/><circle cx="104" cy="22" r="2.5" fill="#cfe3f7"/><circle cx="125" cy="68" r="2.5" fill="#cfe3f7"/>
+    </svg>`
+  },
+  { id: "sudoku", title: "Sudoku", ready: false, emoji: "🔢", desc: "Classic number puzzle.", tags: ["Coming soon"] },
+];
+
+const grid = document.getElementById("games");
+for (const g of GAMES) {
+  const card = document.createElement("article");
+  card.className = "card " + (g.ready ? "ready" : "soon");
+  const url = () => new URL(g.path, location.href).href;
+  card.innerHTML = `
+    <div class="thumb">${g.ready ? g.thumb : g.emoji || "🎲"}</div>
+    <div class="body">
+      <h2></h2><p></p><div class="tags"></div>
+      <div class="actions"></div>
+    </div>`;
+  card.querySelector("h2").textContent = g.title;
+  card.querySelector("p").textContent = g.desc;
+  card.querySelector(".tags").innerHTML = g.tags.map(t => `<span>${t}</span>`).join("");
+  const actions = card.querySelector(".actions");
+  if (g.ready) {
+    const play = Object.assign(document.createElement("a"), { className: "btn play", textContent: "Play", href: g.path });
+    const share = Object.assign(document.createElement("a"), { className: "btn share", textContent: "Share", target: "_blank", rel: "noopener" });
+    share.title = "Share on WhatsApp";
+    share.addEventListener("click", () => { share.href = "https://wa.me/?text=" + encodeURIComponent(`Play ${g.title} with me: ${url()}`); });
+    actions.append(play, share);
+  } else {
+    actions.append(Object.assign(document.createElement("span"), { className: "btn disabled", textContent: "Coming soon" }));
+  }
+  grid.append(card);
+}
+</script>
+</body>
+</html>
