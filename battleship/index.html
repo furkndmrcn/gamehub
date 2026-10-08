@@ -589,10 +589,135 @@
     overlay.classList.remove("hidden");
   }
   const btnEl = (label, fn, secondary) => { const b = ui("button", { textContent: label, className: secondary ? "secondary" : "" }); b.onclick = fn; return b; };
+  // ---------- online play via a public relay (ntfy.sh) — room codes, works through most firewalls ----------
+  const NTFY = "https://ntfy.sh/";
+  const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const newRoomCode = () => Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
+  const rid = () => Math.random().toString(36).slice(2, 10);
+
+  // Returns a channel-like object (readyState/send/close/onopen/onmessage/onclose/onerror) so the game
+  // code is identical for WebRTC and relay connections. role: "host" | "join".
+  function ntfyChannel(code, role) {
+    const topic = "battleship-" + code.toLowerCase();
+    const me = rid();
+    let peerId = null, es = null, closed = false, lastId = "", opened = false, errors = 0, helloTimer = null;
+    const seen = new Set();
+    let queue = Promise.resolve();
+    const ch = { readyState: "connecting", onopen: null, onmessage: null, onclose: null, onerror: null };
+
+    const post = body => {
+      queue = queue.then(async () => {
+        for (let i = 0; i < 3; i++) {
+          try { if ((await fetch(NTFY + topic, { method: "POST", body: JSON.stringify(body) })).ok) return; } catch (e) {}
+          await new Promise(r => setTimeout(r, 700 * (i + 1)));
+        }
+      });
+    };
+    const cleanup = () => {
+      closed = true; clearInterval(helloTimer);
+      if (es) es.close();
+      removeEventListener("pagehide", onHide);
+    };
+    const onHide = () => { if (peerId && !closed) navigator.sendBeacon(NTFY + topic, JSON.stringify({ f: me, h: "bye" })); };
+    const fail = msg => { if (closed) return; ch.readyState = "closed"; cleanup(); ch.onerror && ch.onerror(msg); };
+    const end = () => { if (closed) return; ch.readyState = "closed"; cleanup(); ch.onclose && ch.onclose(); };
+    const open = () => { ch.readyState = "open"; ch.onopen && ch.onopen(); };
+
+    function handle(m) {
+      if (m.f === me) return;
+      if (m.h === "hello" && role === "host") {
+        if (peerId && peerId !== m.f) return post({ f: me, h: "full", to: m.f });
+        const first = !peerId; peerId = m.f;
+        post({ f: me, h: "welcome", to: m.f });
+        if (first) open();
+      } else if (m.h === "welcome" && role === "join" && m.to === me && !peerId) {
+        peerId = m.f; clearInterval(helloTimer); open();
+      } else if (m.h === "full" && m.to === me) fail("That room already has two players.");
+      else if (m.h === "bye" && m.f === peerId) end();
+      else if (m.d !== undefined && m.f === peerId && ch.readyState === "open") ch.onmessage && ch.onmessage({ data: m.d });
+    }
+    function connect() {
+      if (closed) return;
+      es = new EventSource(`${NTFY}${topic}/sse?since=${lastId || "all"}`);
+      es.onopen = () => {
+        errors = 0;
+        if (opened) return;
+        opened = true;
+        if (role === "join") {
+          let tries = 0;
+          post({ f: me, h: "hello" });
+          helloTimer = setInterval(() => {
+            if (peerId || closed) return clearInterval(helloTimer);
+            if (++tries > 4) return fail("Couldn't find that room. Check the code and make sure your friend created it.");
+            post({ f: me, h: "hello" });
+          }, 3000);
+        }
+      };
+      es.onmessage = ev => {
+        let d, m;
+        try { d = JSON.parse(ev.data); } catch (e) { return; }
+        if (d.event !== "message" || seen.has(d.id)) return;
+        seen.add(d.id); lastId = d.id;
+        try { m = JSON.parse(d.message); } catch (e) { return; }
+        handle(m);
+      };
+      es.onerror = () => {
+        es.close();
+        if (closed) return;
+        if (!opened && ++errors >= 3) return fail("Can't reach the relay (ntfy.sh). Your network may be blocking it.");
+        setTimeout(connect, 1500);
+      };
+    }
+    ch.send = s => { if (ch.readyState === "open") post({ f: me, to: peerId, d: s }); };
+    ch.close = () => { if (closed) return; if (peerId) post({ f: me, h: "bye" }); ch.readyState = "closed"; cleanup(); };
+    addEventListener("pagehide", onHide);
+    connect();
+    return ch;
+  }
+
   function showOnlineMenu() {
     overlay.classList.remove("hidden");
-    page("Online game", "No server needed: you and your friend swap two short codes (via chat, email, etc.). Both of you open this page.",
-      ui("div", { className: "row" }, btnEl("Host a game", hostFlow), btnEl("Join a game", joinFlow), btnEl("Back", () => { closePeer(); showMenu(); }, true)));
+    page("Online game", "Create a room and share the 6-letter code with a friend, or join theirs.",
+      ui("div", { className: "row" }, btnEl("Create room", createRoom), btnEl("Join room", joinRoom)),
+      ui("div", { className: "row" }, btnEl("Connect with codes (advanced)", showManualMenu, true), btnEl("Back", () => { closePeer(); showMenu(); }, true)));
+  }
+  function showManualMenu() {
+    page("Connect with codes", "No relay: you and your friend swap two longer codes by chat. Works only if your networks allow direct connections.",
+      ui("div", { className: "row" }, btnEl("Host a game", hostFlow), btnEl("Join a game", joinFlow), btnEl("Back", showOnlineMenu, true)));
+  }
+  function createRoom() {
+    closePeer(); isHost = true;
+    const code = newRoomCode();
+    const ch = ntfyChannel(code, "host");
+    setupChannel(ch);
+    const big = ui("div", { textContent: code });
+    big.style.cssText = "font:800 2.6rem monospace;letter-spacing:.3em;padding:10px 6px 10px 22px;border:2px dashed #2a4a75;border-radius:12px;user-select:all;";
+    const status = ui("p", { textContent: "Waiting for your friend to join…" });
+    ch.onerror = msg => { status.textContent = msg; };
+    const link = ui("a", { textContent: "Send on WhatsApp", className: "btn", target: "_blank", rel: "noopener" });
+    link.style.cssText = "background:#25d366;color:#04121f;border-radius:8px;padding:10px 16px;font-weight:700;text-decoration:none;";
+    link.href = "https://wa.me/?text=" + encodeURIComponent(`Let's play Battleship! Open ${location.href.split("#")[0]} → Online game → Join room, and enter code ${code}`);
+    page("Room created", "Tell your friend this code:", big, status,
+      ui("div", { className: "row" }, link, btnEl("Cancel", () => { closePeer(); showOnlineMenu(); }, true)));
+  }
+  function joinRoom() {
+    closePeer(); isHost = false;
+    const inp = ui("input", { placeholder: "ROOM CODE", maxLength: 8, autocapitalize: "characters", autocomplete: "off" });
+    inp.style.cssText = "font:800 1.8rem monospace;letter-spacing:.3em;text-align:center;width:min(86vw,300px);padding:10px;border-radius:10px;border:2px solid #2a4a75;background:#0b1d33;color:#e8f1fb;text-transform:uppercase;";
+    const status = ui("p", { textContent: "" });
+    const go = btnEl("Join", () => {
+      const code = inp.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (code.length < 4) { status.textContent = "Enter the room code your friend sent."; return; }
+      closePeer();
+      const ch = ntfyChannel(code, "join");
+      setupChannel(ch);
+      ch.onerror = msg => { status.textContent = msg; go.disabled = false; go.textContent = "Try again"; };
+      go.disabled = true; go.textContent = "Connecting…"; status.textContent = "Looking for the room…";
+    });
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") go.click(); });
+    page("Join a room", "Enter the code your friend sent you:", inp, status,
+      ui("div", { className: "row" }, go, btnEl("Cancel", () => { closePeer(); showOnlineMenu(); }, true)));
+    inp.focus();
   }
   async function hostFlow() {
     closePeer(); isHost = true;
